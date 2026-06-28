@@ -1,0 +1,55 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# OpenFHE takes ~20 minutes to compile from source. We cache the install
+# directory keyed on the OpenFHE git ref so subsequent runs reuse it.
+env:
+  OPENFHE_REF: v1.5.1
+  OPENFHE_PREFIX: ${{ github.workspace }}/.deps/openfhe
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build \
+                                  libssl-dev libomp-dev
+
+      - name: Cache OpenFHE
+        id: cache-openfhe
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.OPENFHE_PREFIX }}
+          key: openfhe-${{ env.OPENFHE_REF }}-ubuntu-24.04
+
+      - name: Build OpenFHE from source
+        if: steps.cache-openfhe.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 --branch ${{ env.OPENFHE_REF }} \
+              https://github.com/openfheorg/openfhe-development.git openfhe-src
+          cmake -S openfhe-src -B openfhe-src/build -G Ninja \
+                -DCMAKE_INSTALL_PREFIX=${{ env.OPENFHE_PREFIX }} \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DBUILD_UNITTESTS=OFF -DBUILD_EXAMPLES=OFF -DBUILD_BENCHMARKS=OFF
+          cmake --build openfhe-src/build --parallel
+          cmake --install openfhe-src/build
+
+      - name: Configure
+        run: |
+          cmake -S . -B build -G Ninja \
+                -DCMAKE_PREFIX_PATH=${{ env.OPENFHE_PREFIX }} \
+                -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Verify binary exists
+        run: test -x build/secure_aggregation_sim

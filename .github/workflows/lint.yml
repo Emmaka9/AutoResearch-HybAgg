@@ -1,0 +1,29 @@
+name: lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  clang-format:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install clang-format
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-format
+
+      # Informational only for now: prints the diff but does not fail the job.
+      # To enforce formatting, change the command to:
+      #   clang-format --dry-run --Werror $files
+      # and run `clang-format -i $(git ls-files '*.cpp' '*.h')` once to bring
+      # the existing code in line with .clang-format.
+      - name: Show formatting diff
+        run: |
+          files=$(git ls-files '*.cpp' '*.h')
+          for f in $files; do
+            diff -u "$f" <(clang-format "$f") || true
+          done
